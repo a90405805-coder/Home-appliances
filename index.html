@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>家電們的深夜真心話 - 綠生活小遊戲</title>
+    <style>
+        body { 
+            margin: 0; padding: 0; overflow: hidden; 
+            background-color: #1a1a1a; 
+            font-family: "Microsoft JhengHei", "Apple LiGothic Medium", sans-serif; 
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            /* 項目 3: 加入自定義手指游標 */
+            cursor: url('./finger.png'), auto; 
+        }
+
+        /* 確保互動元件在點擊時也顯示手指游標 */
+        button, input, .form-box, #gameCanvas {
+            cursor: url('./finger.png'), auto;
+        }
+
+        #game-container { 
+            position: relative; width: 100vw; height: 100vh; 
+            display: flex; flex-direction: column; align-items: center; 
+        }
+        
+        #background-image {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('./bg.jpg') no-repeat center center;
+            background-size: cover; z-index: 1; transition: filter 0.6s ease;
+        }
+        .darken { filter: brightness(0.2) blur(8px); }
+
+        #ui-layer { 
+            position: relative; z-index: 10; width: 100%; height: 100%; 
+            display: flex; flex-direction: column; align-items: center; pointer-events: none; 
+        }
+        
+        #header-text { 
+            margin-top: 30px; width: 85%; color: #ffffff; text-align: center; 
+            font-size: 18px; line-height: 1.6; text-shadow: 0 2px 10px rgba(0,0,0,0.9); 
+            background: rgba(0,0,0,0.6); padding: 15px; border-radius: 12px; 
+        }
+
+        #score-board { 
+            margin-top: 15px; color: #3498db; font-size: 24px; font-weight: bold; 
+            display: none; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); 
+        }
+
+        #start-btn {
+            position: absolute; bottom: 15%; padding: 16px 40px; font-size: 20px; 
+            font-weight: bold; pointer-events: auto;
+            /* 將開始按鈕也改為藍色調 */
+            background: linear-gradient(135deg, #2980b9, #3498db); color: white; 
+            border: none; border-radius: 50px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); 
+            transition: 0.3s;
+        }
+        #start-btn:active { transform: scale(0.95); }
+
+        #gameCanvas { position: absolute; top: 0; left: 0; z-index: 5; display: none; }
+
+        #form-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 100; display: none;
+            justify-content: center; align-items: center; pointer-events: auto;
+        }
+        .form-box {
+            background: #ffffff; padding: 25px; border-radius: 20px; width: 85%; max-width: 320px; 
+            text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .form-box h2 { color: #2c3e50; font-size: 22px; margin-bottom: 10px; }
+        .form-input {
+            width: 100%; padding: 12px; margin-bottom: 15px; border: 2px solid #ecf0f1;
+            border-radius: 10px; box-sizing: border-box; font-size: 16px; outline: none;
+        }
+        .form-input:focus { border-color: #3498db; }
+        #submit-btn {
+            width: 100%; padding: 14px; background: #3498db; color: white;
+            border: none; border-radius: 10px; font-size: 18px; font-weight: bold;
+        }
+        #submit-btn:disabled { background: #bdc3c7; }
+
+        .effect-text { 
+            position: absolute; font-weight: bold; font-size: 32px; 
+            pointer-events: none; z-index: 20; animation: floatUp 0.8s ease-out forwards; 
+        }
+        @keyframes floatUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-80px); opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="background-image"></div>
+    <div id="ui-layer">
+        <div id="header-text">
+            你知道每到深夜，你家的家電都在開『抱怨大會』嗎？<br>
+            聽聽它們的心聲，不然下個月收到電費帳單，換你要哭了！
+        </div>
+        <div id="score-board">得分: 0 | 剩餘時間: 30s</div>
+        <button id="start-btn">停止家電抱怨，開始挑戰</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="form-overlay">
+        <div class="form-box">
+            <h2 id="final-score-display">最終得分：0</h2>
+            <p style="color: #7f8c8d; margin-bottom: 20px;">請留下資料領取節能小禮！</p>
+            <input type="text" id="player-name" class="form-input" placeholder="您的姓名" maxlength="10">
+            <input type="tel" id="player-phone" class="form-input" placeholder="手機號碼" maxlength="10">
+            <button id="submit-btn">傳送資料</button>
+            <p id="status-msg" style="margin-top:12px; font-size: 14px; font-weight: bold;"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- 正式 GAS 網址 ---
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyntfy2dVyOOAHn7sSnWiXicKHy9K1LGYTFS1-Eq7mIjcos7iWCiFMiVwwsGnJhk-Rm/exec'; 
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const startBtn = document.getElementById('start-btn');
+const bgImg = document.getElementById('background-image');
+const scoreBoard = document.getElementById('score-board');
+const formOverlay = document.getElementById('form-overlay');
+const submitBtn = document.getElementById('submit-btn');
+
+let score = 0;
+let timeLeft = 30;
+let gameActive = false;
+let items = [];
+let lastSpawnTime = 0;
+
+const questions = [
+    { t: "冰箱只放七分滿", f: "食物塞滿到門難關" },
+    { t: "熱食放涼後再進冰箱", f: "熱湯直接放入冰箱" },
+    { t: "想好目標再開冰箱", f: "開著冰箱門發呆" },
+    { t: "冷氣 26-28度配扇", f: "冷氣狂開 16 度" },
+    { t: "定期清洗冷氣濾網", f: "濾網積滿灰塵不洗" },
+    { t: "不看時關閉電視電源", f: "長期待機橘燈亮" },
+    { t: "更換 LED 節能燈泡", f: "使用老舊高耗能燈" },
+    { t: "隨手關閉不使用的電燈", f: "沒人也全家燈火通明" }
+];
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+startBtn.addEventListener('click', startGame);
+
+function startGame() {
+    gameActive = true; score = 0; timeLeft = 30; items = [];
+    startBtn.style.display = 'none';
+    bgImg.classList.add('darken');
+    canvas.style.display = 'block';
+    scoreBoard.style.display = 'block';
+    requestAnimationFrame(update);
+    let timer = setInterval(() => {
+        if(!gameActive) { clearInterval(timer); return; }
+        timeLeft--;
+        if (timeLeft <= 0) { clearInterval(timer); endGame(); }
+    }, 1000);
+}
+
+class FallingOption {
+    constructor(text, isCorrect, xOffset) {
+        this.text = text; this.isCorrect = isCorrect;
+        /* 項目 1: 尺寸放大 30% (原本 240x70 -> 312x91) */
+        this.width = 312; this.height = 91; 
+        this.x = (canvas.width / 2) - (this.width / 2) + xOffset;
+        this.y = -100;
+        this.speed = canvas.height / (3 * 60);
+        this.alpha = 1; this.clicked = false;
+    }
+    draw() {
+        ctx.save(); ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = "#ffffff";
+        /* 項目 2: 全部改為藍框 (#3498db) */
+        ctx.strokeStyle = "#3498db"; 
+        ctx.lineWidth = 5; // 稍微加粗框線以配合放大後的尺寸
+        ctx.beginPath();
+        const r = 20; // 圓角也同步放大
+        ctx.roundRect(this.x, this.y, this.width, this.height, r);
+        ctx.fill(); ctx.stroke();
+        
+        ctx.fillStyle = "#2c3e50"; 
+        /* 項目 1: 字體也放大 30% (原本 18px -> 24px) */
+        ctx.font = "bold 24px sans-serif"; 
+        ctx.textAlign = "center";
+        ctx.fillText(this.text, this.x + this.width / 2, this.y + 55); // 調整文字垂直置中位置
+        ctx.restore();
+    }
+    update() { this.y += this.speed; if (this.clicked) this.alpha -= 0.15; }
+}
+
+function update(time) {
+    if (!gameActive) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (time - lastSpawnTime > 1600) {
+        const q = questions[Math.floor(Math.random() * questions.length)];
+        const side = Math.random() > 0.5 ? 1 : -1;
+        // 配合選單放大，稍微拉開左右間距，避免重疊
+        const gap = canvas.width > 600 ? 190 : 160; 
+        items.push(new FallingOption(q.t, true, gap * side));
+        items.push(new FallingOption(q.f, false, gap * -side));
+        lastSpawnTime = time;
+    }
+    items = items.filter(item => item.y < canvas.height && item.alpha > 0);
+    items.forEach(item => { item.update(); item.draw(); });
+    // 得分板顏色也改為藍色
+    scoreBoard.innerText = `得分: ${score} | 剩餘時間: ${timeLeft}s`;
+    
+    requestAnimationFrame(update);
+}
+
+const handleAction = (e) => {
+    if (!gameActive) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+    // 考慮自定義游標的點擊熱點 (通常在左上角)
+    const mx = clientX - rect.left; 
+    const my = clientY - rect.top;
+    
+    items.forEach(item => {
+        if (!item.clicked && mx > item.x && mx < item.x + item.width && my > item.y && my < item.y + item.height) {
+            item.clicked = true;
+            if (item.isCorrect) { score += 10; showEffect("+10", mx, my, "#3498db"); } // 特效改為藍色
+            else { showEffect("+00", mx, my, "#95a5a6"); }
+            items.filter(i => Math.abs(i.y - item.y) < 30).forEach(i => i.clicked = true);
+        }
+    });
+};
+
+canvas.addEventListener('mousedown', handleAction);
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(e); }, { passive: false });
+
+function showEffect(text, x, y, color) {
+    const el = document.createElement('div'); el.className = 'effect-text';
+    el.innerText = text; el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.color = color;
+    document.body.appendChild(el); setTimeout(() => el.remove(), 800);
+}
+
+function endGame() {
+    gameActive = false;
+    canvas.style.display = 'none';
+    scoreBoard.style.display = 'none';
+    document.getElementById('final-score-display').innerText = `最終得分：${score}`;
+    formOverlay.style.display = 'flex';
+}
+
+submitBtn.addEventListener('click', () => {
+    const name = document.getElementById('player-name').value.trim();
+    const phone = document.getElementById('player-phone').value.trim();
+    const status = document.getElementById('status-msg');
+
+    if (!name || !phone) { alert('請填寫完整姓名與手機！'); return; }
+    if (phone.length < 10) { alert('手機號碼格式不正確！'); return; }
+
+    submitBtn.disabled = true;
+    status.style.color = "#3498db"; // 狀態字體改為藍色
+    status.innerText = '資料傳送中...';
+
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, phone: phone, score: score })
+    }).then(() => {
+        status.style.color = "#3498db";
+        status.innerText = '傳送完畢！正在重新載入遊戲...';
+        setTimeout(() => location.reload(), 2500);
+    }).catch(() => {
+        status.style.color = "#e74c3c";
+        status.innerText = '系統忙碌中，請重新嘗試。';
+        submitBtn.disabled = false;
+    });
+});
+</script>
+</body>
+</html>
